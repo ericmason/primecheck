@@ -1,6 +1,14 @@
 #!/usr/bin/python3
 
 import gmpy2, optparse, sys, os, subprocess, re, configparser
+from pprint import pprint
+
+def print_warn(string):
+  print("\033[93m%s\033[39m" % string)
+
+def print_ok(string):
+  print("\033[92m%s\033[39m" % string)
+
 
 parser = optparse.OptionParser()
 
@@ -9,50 +17,125 @@ parser.add_option("-s", "--server", dest="server")
 parser.add_option("-p", "--port", dest="port", default=443, help="port (default 443/https)")
 (opts, args) = parser.parse_args()
 
-if opts.prime:
-	prime = gmpy2.mpz(opts.prime, 16)
-elif opts.server:
-	ossl_out = subprocess.check_output([os.path.dirname(sys.argv[0])+"/openssl-trace",
-		"s_client", "-trace",
-		"-servername", opts.server,
-		"-cipher", "DHE",
-		"-connect", opts.server+":"+str(opts.port)],
-		stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-	for line in ossl_out.decode("utf-8").splitlines():
-		if 'dh_p' in line:
-			prime = gmpy2.mpz(re.sub(".*: ", "", line), 16)
-else:
-	parser.print_help()
-	sys.exit(1)
+# Ciphers that include DHE
+ciphers = [
+  # TLS 1.3
+  # 'TLS_AES_256_GCM_SHA384',
+  # 'TLS_CHACHA20_POLY1305_SHA256',
+  # 'TLS_AES_128_GCM_SHA256',
 
-print("checking prime p = %s" % hex(prime))
+  # 'ECDHE-ECDSA-AES256-GCM-SHA384',
+  # 'ECDHE-RSA-AES256-GCM-SHA384',
+  'DHE-RSA-AES256-GCM-SHA384',
+  # 'ECDHE-ECDSA-CHACHA20-POLY1305',
+  # 'ECDHE-RSA-CHACHA20-POLY1305',
+  'DHE-RSA-CHACHA20-POLY1305',
+  # 'ECDHE-ECDSA-AES128-GCM-SHA256',
+  # 'ECDHE-RSA-AES128-GCM-SHA256',
+  'DHE-RSA-AES128-GCM-SHA256',
+  # 'ECDHE-ECDSA-AES256-SHA384',
+  # 'ECDHE-RSA-AES256-SHA384',
+  'DHE-RSA-AES256-SHA256',
+  # 'ECDHE-ECDSA-AES128-SHA256',
+  # 'ECDHE-RSA-AES128-SHA256',
+  'DHE-RSA-AES128-SHA256',
+  # 'ECDHE-ECDSA-AES256-SHA',
+  # 'ECDHE-RSA-AES256-SHA',
+  'DHE-RSA-AES256-SHA',
+  # 'ECDHE-ECDSA-AES128-SHA',
+  # 'ECDHE-RSA-AES128-SHA',
+  'DHE-RSA-AES128-SHA',
+  # 'RSA-PSK-AES256-GCM-SHA384',
+  'DHE-PSK-AES256-GCM-SHA384',
+  # 'RSA-PSK-CHACHA20-POLY1305',
+  'DHE-PSK-CHACHA20-POLY1305',
+  # 'ECDHE-PSK-CHACHA20-POLY1305',
+  # 'AES256-GCM-SHA384',
+  # 'PSK-AES256-GCM-SHA384',
+  # 'PSK-CHACHA20-POLY1305',
+  # 'RSA-PSK-AES128-GCM-SHA256',
+  'DHE-PSK-AES128-GCM-SHA256',
+  # 'AES128-GCM-SHA256',
+  # 'PSK-AES128-GCM-SHA256',
+  # 'AES256-SHA256',
+  # 'AES128-SHA256',
+  # 'ECDHE-PSK-AES256-CBC-SHA384',
+  # 'ECDHE-PSK-AES256-CBC-SHA',
+  # 'SRP-RSA-AES-256-CBC-SHA',
+  # 'SRP-AES-256-CBC-SHA',
+  # 'RSA-PSK-AES256-CBC-SHA384',
+  'DHE-PSK-AES256-CBC-SHA384',
+  # 'RSA-PSK-AES256-CBC-SHA',
+  'DHE-PSK-AES256-CBC-SHA',
+  # 'AES256-SHA',
+  # 'PSK-AES256-CBC-SHA384',
+  # 'PSK-AES256-CBC-SHA',
+  # 'ECDHE-PSK-AES128-CBC-SHA256',
+  # 'ECDHE-PSK-AES128-CBC-SHA',
+  # 'SRP-RSA-AES-128-CBC-SHA',
+  # 'SRP-AES-128-CBC-SHA',
+  # 'RSA-PSK-AES128-CBC-SHA256',
+  'DHE-PSK-AES128-CBC-SHA256',
+  # 'RSA-PSK-AES128-CBC-SHA',
+  'DHE-PSK-AES128-CBC-SHA',
+  # 'AES128-SHA',
+  # 'PSK-AES128-CBC-SHA256',
+  # 'PSK-AES128-CBC-SHA'
+]
+
+if opts.prime:
+  prime = gmpy2.mpz(opts.prime, 16)
+elif opts.server:
+  prime = None
+  command = ["openssl",
+    "s_client", "-trace",
+    "-tls1_2",
+    "-servername", opts.server,
+    "-cipher", ":".join(ciphers),
+    "-connect", opts.server+":"+str(opts.port)]
+  print("Run %s" % " ".join(command))
+  ossl_out = subprocess.check_output(command,
+    stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  for line in ossl_out.decode("utf-8").splitlines():
+    if 'dh_p' in line:
+      prime = gmpy2.mpz(re.sub(".*: ", "", line), 16)
+else:
+  parser.print_help()
+  sys.exit(1)
+
+if not prime:
+  print("No DH prime found in server response")
+  sys.exit(1)
 
 bits = prime.bit_length()
 
 # check for known primes
 
 config = configparser.ConfigParser()
-config.read(os.path.dirname(sys.argv[0])+'/knownprimes.ini')
+config_path = os.path.dirname(sys.argv[0])+'/knownprimes.ini'
+config.read(config_path)
 
 for sect in config.sections():
-	if config.get(sect, 'prime') == hex(prime):
-		print("This is known prime %s" % sect)
+  if config.get(sect, 'prime') == hex(prime):
+    print_warn("This is known prime %s" % sect)
 
 if bits < 1024:
-	print("\033[91m%i bits, that's very short and insecure, use 2048 bit or more\033[39m" % bits)
+  print("\033[91m%i bits, that's very short and insecure, use 2048 bit or more\033[39m" % bits)
 elif bits < 2048:
-	print("\033[93m%i bits, better use 2048 bit or more\033[39m" % bits)
+  print("\033[93m%i bits, better use 2048 bit or more\033[39m" % bits)
 else:
-	print("\033[92m%i bits, that should be long enough\033[39m" % bits)
+  print("\033[92m%i bits, that should be long enough\033[39m" % bits)
 
 if gmpy2.is_prime(prime):
-	print("\033[92mp is prime\033[39m")
+  print("\033[92mp is prime\033[39m")
 else:
-	print("\033[91mnoprimep is not a prime, that is broken\033[39m")
+  print("\033[91mnoprimep is not a prime, that is broken\033[39m")
 
-p12 = gmpy2.div(gmpy2.sub(prime, 1), 2)
+
+
+p12 = gmpy2.t_div(gmpy2.sub(prime, 1), 2)
 
 if gmpy2.is_prime(p12):
-	print("\033[92m(p-1)/2 is a Sophie Germain Prime, p is a safe prime\033[39m")
+  print_ok("(p-1)/2 is a Sophie Germain Prime, p is a safe prime")
 else:
-	print("\033[93m(p-1)/2 is not a prime, therefore p is no safe prime\033[39m")
+  print_warn("(p-1)/2 is not a prime, therefore p is no safe prime")

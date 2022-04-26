@@ -18,6 +18,23 @@ To check a TLS connection on another port:
 To check a prime manually:
   `./primecheck -n 0x7`
 
+docker
+======
+
+Run
+---
+  `docker run primecheck -s [hostname]`
+
+Build
+-----
+
+  `docker build . -t primecheck`
+
+Shell
+-----
+
+  `docker run -it --entrypoint /bin/bash  primecheck`
+
 notes on openssl usage
 ======================
 

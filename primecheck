@@ -103,6 +103,14 @@ else:
   parser.print_help()
   sys.exit(1)
 
+if (prime is None):
+  print("No prime found. The server may not support DHE ciphersuites.")
+  sys.exit(1)
+
+print("")
+print("Prime: %s" % hex(prime))
+print("")
+
 if not prime:
   print("No DH prime found in server response")
   sys.exit(1)
@@ -131,11 +139,9 @@ if gmpy2.is_prime(prime):
 else:
   print("\033[91mnoprimep is not a prime, that is broken\033[39m")
 
-
-
 p12 = gmpy2.t_div(gmpy2.sub(prime, 1), 2)
 
 if gmpy2.is_prime(p12):
   print_ok("(p-1)/2 is a Sophie Germain Prime, p is a safe prime")
 else:
-  print_warn("(p-1)/2 is not a prime, therefore p is no safe prime")
+  print_warn("(p-1)/2 is not a prime, therefore p is not a safe prime")
